@@ -14,7 +14,7 @@ This repository contain all de file used for the barcoding analysis present in o
 The data present here (**20220905_DataPhotomic2**) are 16S rRNA gene of bacterial communities amplified usinf the variable V3-V4 loops (341F / 805R). This data were obtained by Paired-end sequencing performed on the MiSeq system (Illumina) at the Bio-Environment platform (UPVD). The **MetadataFile3_ASV.txt** present all the metadata needed for the analysis usinf the tsv format (tab used as separator).
 
 ## 2. The Amplicon Sequence Variants (ASV) creation ##
-ASVs were created using bash language on a mac terminal. The used script (**ASV_Script.md**) present all the step we perform to obtain our results. During the ASV creation pipeline we also created the Phylogenetic tree used for the diversity analysis (**/rooted-tree_PseudoPooling.qza**) and the Taxonomic affiliation (**taxonomy_SilvaTraining_Pooling2.qza**).
+ASVs were created using bash language on a mac terminal. The used script (**ASV_Script.md**) present all the step we perform to obtain our results. During the ASV creation pipeline we also created the Phylogenetic tree used for the diversity analysis (**rooted-tree_PseudoPooling.qza**) and the Taxonomic affiliation (**taxonomy_SilvaTraining_Pooling2.qza**).
 
 ## 3. The statistical analysis ##
 The statistical analysis were performed on R using a phyloseq object. The used script (**Photomic2-AnalyseEau-Article.Rmd**) present all the used packages and the commands lines performed for the statistical analysis of our data.
