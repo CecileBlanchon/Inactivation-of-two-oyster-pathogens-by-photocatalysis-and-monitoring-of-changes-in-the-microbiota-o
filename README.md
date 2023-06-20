@@ -17,4 +17,4 @@ The data present here (**20220905_DataPhotomic2**) are 16S rRNA gene of bacteria
 ASVs were created using bash language on a mac terminal. The used script (**ASV_Script.md**) present all the step we perform to obtain our results. During the ASV creation pipeline we also created the Phylogenetic tree used for the diversity analysis (**rooted-tree_PseudoPooling.qza**) and the Taxonomic affiliation (**taxonomy_SilvaTraining_Pooling2.qza**).
 
 ## 3. The statistical analysis ##
-The statistical analysis were performed on R using a phyloseq object. The used script (**Photomic2-AnalyseEau-Article.Rmd**) present all the used packages and the commands lines performed for the statistical analysis of our data.
+The statistical analysis were performed on R using a phyloseq object. The used script (**Photomic2-AnalyseEau-Article1.Rmd**) present all the used packages and the commands lines performed for the statistical analysis of our data.
