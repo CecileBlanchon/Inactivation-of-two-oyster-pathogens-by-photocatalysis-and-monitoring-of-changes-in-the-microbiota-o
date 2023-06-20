@@ -1,0 +1,641 @@
+---
+title: "Analyse des échantillons d'eau pour l'article"
+author: "Cécile Blanchon"
+date: "10/01/2023"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, results='hide', message=FALSE, error=FALSE}
+ setwd("/Users/cecileblanchon/Documents/ThèseUPVD/Résultats/202206_PhotocatalyseVirus-Barcoding_qPCR/BarcodingRangé/4-AnalyseStat-R/AnalyseEau")
+```
+
+# TRAITEMENTS DES DONNEES DE BARCODING
+
+Ce document retrace le traitement des données de barcoding obtenue lors du **projet Photomic**. Il s'agit d'une étude des communautées bactériennes d'eau de mer exposée à différents traitement de désinfection et des communautées bactériennes d'huîtres après injection d'eau de mer traitée. **Le projet Photomic comprend 2 campagnes expérimentales :**\
+- **Photomic 1** : réalisé en **mai 2022** sur des **huîtres juvéniles NSI** (problème lors de la production d'EMC, pas assez de virus relagué dans l'eau). L'échnatillonnage des huîtres a été réalisé 48h post injection et mise en eau.\
+- **Photomic 2** : réalisé en **juin 2022** sur des **huîtres juvéniles F14V**. L'échantillonnage des huîtres a été réaslié 24h post injection et mise en eau.
+
+Ici seul les données sur l'eau du projet Photomic 2 seront traitées
+
+## Installation/Téléchargement de Phyloseq
+
+Il faut dans un premier temps télécharger le package Phyloseq. ! les commandes peuvent variées en fonction de la version de R. Ici il s'agit de : *R version 4.2.1 (2022-06-23)*
+
+```{r, results='hide', message=FALSE, error=FALSE}
+# install.packages("knitr")
+ install.packages("BiocManager")
+library("BiocManager")
+BiocManager::install("https://bioconductor.org/biocLite.R")
+# BiocManager::install('phyloseq')
+# install.packages("devtools")
+library("devtools")
+BiocManager::install('phyloseq', force = TRUE)
+library(phyloseq)
+source("https://raw.githubusercontent.com/mahendra-mariadassou/phyloseq-extended/master/load-extra-functions.R") 
+#vignette("phyloseq_basics")
+#vignette("phyloseq_analysis")
+
+# BiocManager::install("DESeq2") # !!! DESeq2 compromet les analyses de distance --> le déinstaller lorsqu'on fait des analyses de distance
+# library(DESeq2)
+
+install.packages("microbial")
+library(microbial) 
+```
+
+D'autres packages sont également nécessaires:
+
+```{r, results='hide', message=FALSE}
+library(ggplot2) # pour les graphiques
+library(plyr) # pour filtrer et reformater les data
+library(reshape2)
+library(grid)
+library(gridExtra)
+library(ape)
+library(scales)
+library(readxl)
+library(tidyverse)
+library(ecotraj) # pour les PCoA avec trajectoire
+
+#install.packages("RVAideMemoire")
+library(RVAideMemoire)
+
+#install_github("jbisanz/qiime2R")
+library(qiime2R) # pour récupérer les abondances des taxons
+
+#install.packages("writexl")
+library(writexl)
+
+#install.packages("ggpubr")
+library(ggpubr)
+
+# devtools::install_github("pmartinezarbizu/pairwiseAdonis/pairwiseAdonis")
+
+# devtools::install_github("benjjneb/dada2", ref="v1.16")
+# library(dada2)
+
+### téléchargement de dysbiosisR pour faire l'étude de dysbiose du microbiote
+BiocManager::install("microbiome")
+library(microbiome)
+# devtools::install_github("microsud/dysbiosisR")
+library(dysbiosisR)
+
+#BiocManager::install("escamero/mirlyn")
+library(mirlyn)
+
+library(edgeR)
+```
+
+## Importation et mise en forme des données
+
+### a. Importation des données de séquençage
+
+Les données ont été **obtenues par séquençages MiSeq Illumina de la région V3-V4 du gène codant pour l'ARNr 16S**. Une fois les données de séquençage obtenues, celles-ci ont été dans un premier temps traitée avec DADA2 et Qiime2 pour génrer des ASV et nettoyer les données (suppréssion des chimères et des singletons). L'affiliation taxonomique des ASVs (à partir de la base de donnée 16S Silva 138 entrainer avec les amorces V3V4 utilisées) est donnée dans le fichier *taxonomy_SilvaTraining_Pooling2.qza*. L'arbre phylogénétique obtenu avec FastTree est donnée dans le fichier *rooted-tree_PseudoPooling.qza*. Et le **fichier obtenu après la création d'ASV**: *table_PseudoPooling2.qza*.
+
+```{r, message=FALSE}
+physeq_Photomic2<-qza_to_phyloseq(features="/Users/cecileblanchon/Documents/ThèseUPVD/Résultats/202206_PhotocatalyseVirus-Barcoding_qPCR/BarcodingRangé/1-AnalyseASV/2-AvecPooling/table_PseudoPooling.qza",
+                        tree="/Users/cecileblanchon/Documents/ThèseUPVD/Résultats/202206_PhotocatalyseVirus-Barcoding_qPCR/BarcodingRangé/1-AnalyseASV/2-AvecPooling/rooted-tree_PseudoPooling.qza",
+                        taxonomy="/Users/cecileblanchon/Documents/ThèseUPVD/Résultats/202206_PhotocatalyseVirus-Barcoding_qPCR/BarcodingRangé/1-AnalyseASV/2-AvecPooling/Affiliation Silva V3V4/taxonomy_SilvaTraining_Pooling2.qza")
+data <- physeq_Photomic2
+sample_names(data)
+```
+
+### b. Importation des metadonnées
+
+Le fichier de metadata permet d'aporter plus de précision sur l'obtention des données et sur les échantillons ! il doit contenir les **noms d'échantillons tel qu'ils sont dans le fichier qza** et ne doit **pas contenir d'espace, d'accent ou de caractères spéciaux**.
+
+```{r, message=FALSE}
+# Photomic 2
+sampledata <-read.csv("/Users/cecileblanchon/Documents/ThèseUPVD/Résultats/202206_PhotocatalyseVirus-Barcoding_qPCR/BarcodingRangé/Metadata/MetadataFile3_ASV.txt", sep="\t", row.names = 1)
+sample_data(data) <- sampledata
+data
+
+### Élimination des échantillons autres que l'eau
+data_Water = subset_samples(data, !SampleType == "Oyster") # supprimer les échantillons d'huitres
+data_Water
+
+data_Water_nF = subset_samples(data_Water, !FiltrationBeforeExtraction == "Filtration") # supprimer les échantillons filtrés
+data_Water_nF
+
+data <- data_Water_nF
+data
+```
+
+### c. Mise en forme et nettoyage des données
+
+Dans un premier temps, les noms des rangs taxonomiques dans le fichier sont ajoutés pour rendre le fichier plus clair. Puis dans la mesure où nous ne nous intéressons qu'aux communautées bactériennes, les **Chloroplates et les Archées sont éliminées** pour créer un nouveau jeux de donnée *"data1.1"*. De ce nouveau jeu est également enlevé les OTUs dont le genre bactérien est "unknown" avant de normaliser les OTUs des différents échantillons (échantillon avec le moins d'OTU avec \~ 68 000) et de créer un nouveau jeux de donnée *"data2"*.
+
+```{r, message=FALSE}
+## Change taxonomic rank names (16S)
+new_rank <- c("Kingdom", "Phylum",  "Class",   "Order",   "Family",  "Genus",   "Species")
+colnames(tax_table(data)) <- new_rank
+
+## Deleate chloroplastes  et archees 16s
+nochlo = subset_taxa(data, !Class=="Chloroplast") # supprimer les chloroplastes
+nochlo
+
+bac = subset_taxa(nochlo, Kingdom=="d__Bacteria") # conserver uniquement les bacteries
+bac
+
+data1.1 = prune_taxa(taxa_sums(bac)!=0, bac) # supprimer les otu qui ne comptabilisent pas de count dans les échantillons
+data1.1
+```
+
+Avant de normaliser les données les Genres bactérien "Unknown" sont supprimés et les genres bacteriens "Uncultured" sont remplacés par la "Genus\_" suivi de la famille bacterienne.
+
+```{r, message=FALSE}
+# install.packages("stringr")
+library(stringr)
+
+data1.2 = subset_taxa(data1.1, !Genus=="Unknown")# supprimer tous les OTUs avec un genre bacterien unknown
+data1.2
+
+tax <- data.frame(tax_table(data1.2))
+
+tax.clean <- data.frame(row.names = row.names(tax),
+Kingdom = str_replace(tax[,1], "D_0__",""),
+Phylum = str_replace(tax[,2], "D_1__",""),
+Class = str_replace(tax[,3], "D_2__",""),
+Order = str_replace(tax[,4], "D_3__",""),
+Family = str_replace(tax[,5], "D_4__",""),
+Genus = str_replace(tax[,6], "D_5__",""),
+Species = str_replace(tax[,7], "D_6__",""),
+stringsAsFactors = FALSE)
+tax.clean[is.na(tax.clean)] <- ""
+
+for (i in 1:7){ tax.clean[,i] <- as.character(tax.clean[,i])}
+
+tax.clean[is.na(tax.clean)] <- ""
+for (i in 1:nrow(tax.clean)) {
+  if (tax.clean[i,6]=="uncultured"){
+    genus <- paste("Genus_", tax.clean[i,5], sep = "")
+    tax.clean[i,6:7] <- genus
+  }
+}
+
+tax_table(data1.2) <- as.matrix(tax.clean)
+```
+
+Les datas sont ensuite normalisé pour avoir la même profondeur entre chaque échantillon:\
+- **raréfaction**, les ASV sont tirés au hazard pour avoir un jeu de donnée d'une profondeur voulue avec des ASV représentative de ce qu'il y a dans l'échantillon avant raréfaction.\
+
+```{r, message=FALSE}
+# Sample normalisation (normalized abundance)
+data2 <-rarefy_even_depth(data1.2,rngseed=50000)
+p<-ggrare(data1.2,step=100,color="SampleType",se=FALSE)
+p<-ggrare(data2,step=100,color="SampleType",se=FALSE)
+```
+
+```{r, message=FALSE}
+## Control sample quality
+sum_sample<-sample_sums(data1.2)
+write.table(sum_sample,"photomic_abundances_BeforeNormalisation.txt") # creer un txt avec le nbr de séquence par échantillon
+specific_richness<-estimate_richness(data1.2,measures=c("Observed"))
+write.table(specific_richness,"photomic_richness_BeforeNormalisation.txt") # créer un txt avec les richesses spécifiques
+
+sum_sample<-sample_sums(data2)
+write.table(sum_sample,"photomic_abundances_AfterNormalisation.txt") # creer un txt avec le nbr de séquence par échantillon
+specific_richness<-estimate_richness(data2,measures=c("Observed"))
+write.table(specific_richness,"photomic_richness_AfterNormalisation.txt") # créer un txt avec les richesses spécifiques
+
+## Relative Abundance calcul
+data2.2<-transform_sample_counts(data2,function(x) x/sum(x))
+otutable2<-otu_table(data2.2)
+data2.2
+
+### Exportation de la table des OTUs
+otutable<-otu_table(data2)
+taxtable<-tax_table(data2)
+write.table(otutable,"OTU_ASV_Table_DonneesTraiteesParQIIME-Phyloseq.txt")
+otutable <- data.frame(otutable)
+write_xlsx (otutable,"OTU_ASV_Table_DonneesTraiteesParQIIME-Phyloseq.xlsx")
+write.table(taxtable,"tax_Table_DonneesTraiteesParQIIME-Phyloseq.txt")
+```
+
+### d. Création de sous data pour simplifier les analyses
+
+De nouveau data sont également créés pour simplifier les traitements par la suite. Par exemple, on peut créer un data avec uniquement les échantillons d'eau, ou uniquement les échantillons d'huîtres...
+
+```{r, message=FALSE}
+data_Water_DuringTreatment = subset_samples(data2, !SamplingTime == "10days") # conserver uniquement les échantillons d'eau non filtré échantillonnés pendant le traitement
+data_Water_DuringTreatment = subset_samples(data_Water_DuringTreatment, !SamplingTime == "7days") 
+data_Water_DuringTreatment = subset_samples(data_Water_DuringTreatment, !SamplingTime == "4days") 
+data_Water_DuringTreatment = subset_samples(data_Water_DuringTreatment, !SeawaterTreatment == "Control") # supprimer les échantillons d'eau non contaminée (contrôle)
+data_Water_DuringTreatment
+
+data_Water_AfterTreatment = subset_samples(data2, !SamplingTime == "0h") # supprimer les échantillons d'eau échantillonées pendant les traitements
+data_Water_AfterTreatment = subset_samples(data_Water_AfterTreatment, !SamplingTime == "0.5h")
+data_Water_AfterTreatment = subset_samples(data_Water_AfterTreatment, !SamplingTime == "1h")
+data_Water_AfterTreatment
+
+```
+
+## Visualisation du jeux de données global
+
+### a. Composition
+
+Il s'agit de regarder la différence de composition à différent niveau (phylum, class, famille ou genre) en fonction du type d'échantillon (Eau de mer contaminée ou non par OsHV-1, ou Huitres).
+
+```{r, message=FALSE}
+### Phylum
+p1 <- plot_composition(data2, "Kingdom", "d__Bacteria", "Phylum", numberOfTaxa=10, fill = "Phylum") 
+p1 <- p1 + facet_wrap(~SeawaterTreatment, scales = "free_x", nrow = 1)
+plot(p1)
+### Class
+p2 <- plot_composition(data2, "Kingdom", "d__Bacteria", "Class", numberOfTaxa=15, fill = "Class") 
+p2 <- p2 + facet_wrap(~SeawaterTreatment, scales = "free_x", nrow = 1)
+plot(p2)
+### Family
+p3 <- plot_composition(data2, "Kingdom", "d__Bacteria", "Family", numberOfTaxa=15, fill = "Family") 
+p3 <- p3 + facet_wrap(~SeawaterTreatment, scales = "free_x", nrow = 1)
+plot(p3)
+### Genus
+p4 <- plot_composition(data2, "Kingdom", "d__Bacteria", "Genus", numberOfTaxa=20, fill = "Genus") 
+p4 <- p4 + facet_wrap(~SeawaterTreatment, scales = "free_x", nrow = 1)
+plot(p4)
+
+plot_tree(data2, color="SeawaterTreatment",size = "abundance", sizebase = 2, label.tips = "Genus", plot.margin=0.5, ladderize = TRUE)
+```
+
+### b. Alpha-diversité
+
+**Comparaison de la diversité au sein d'une même communauté** (type d'échantillon) Il y a un effet significatif du type d'injection dans l'huîtres (ou échantillons) sur la diversité bactérienne (p-value \< 0.05 pour l'anova)
+
+```{r, message=FALSE}
+p1 <- plot_richness(data2, color="SeawaterTreatment", x="SeawaterTreatment", measures = c("Chao1", "Shannon", "Observed"))  + geom_boxplot(aes(fill=SeawaterTreatment), alpha=0.2)
+plot(p1)
+
+alpha.diversity <- estimate_richness(data2, measures = c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"))
+write.table(alpha.diversity, "AlphaDiversity.txt")
+
+data3 <- cbind(sample_data(data2), alpha.diversity)
+data3.anova <- aov(Observed~SeawaterTreatment, data3)
+summary(data3.anova)
+
+##Tester que les résidus suivent une loi normale ~ Observed
+mod<-lm(Observed ~ SeawaterTreatment, data=data3)
+x3<-shapiro.test(mod$residuals)
+x3
+
+## homogénéité des variances
+bartlett.test(Observed ~ SeawaterTreatment, data=data3)
+
+## Anova on observed richness
+oneway.test(Observed ~ SeawaterTreatment, data=data3,var.equal=F)
+group3.anova <- aov(Observed ~ SeawaterTreatment, data3)
+summary(group3.anova)
+pairwise.t.test(data3$Observed,data3$SeawaterTreatment,p.adj = "bonf")
+```
+
+### c. Beta-diversité
+
+**Comparaison de la diversité entre deux communautées / dissimilarité entre les échantillons**. Certte comparaison est ici effectuée en utilisant la **méthode de Bray-Curtis.**
+
+```{r, message=FALSE}
+dist.bc <- distance(data2, method = "bray") 
+
+p <- plot_dist_as_heatmap(dist.bc, title = "Bray-Curtis")
+plot(p)
+```
+
+### d. Ordination
+
+```{r, message=FALSE}
+ord <- ordinate(data2, method = "MDS", distance = "bray")
+p1 <- plot_ordination(data2, ord, color = "SeawaterTreatment") + theme_bw() + ggtitle("MDS - BC") 
+plot(p1)
+
+p2 <- plot_ordination(data2, ord, color = "SamplingTime") + theme_bw() + ggtitle("MDS - BC") 
+plot(p2)
+
+metadata <- as (sample_data(data2),"data.frame")
+dist_Water.bc <- distance(data2, method = "bray")
+adonis2(dist_Water.bc~SeawaterTreatment, data = metadata, permutations = 9999, method = "bray")
+
+pairwise.perm.manova(dist_Water.bc,metadata$SeawaterTreatment,nperm=9999,p.method = "bonferroni")
+```
+
+### e. Clustering
+
+Il s'agit de représenter un arbre basé sur les dissimilarités/distances entre les échantillons.
+
+```{r, message=FALSE}
+SeawaterTreatment <- get_variable(data2, "SeawaterTreatment")
+palette <- hue_pal()(4)
+SeawaterTreatment[SeawaterTreatment == "UV"] <- "#F8766D"
+SeawaterTreatment[SeawaterTreatment == "Dark"] <- "#7CAE00"
+SeawaterTreatment[SeawaterTreatment == "UV_TiO2"] <- "#00BFC4"
+SeawaterTreatment[SeawaterTreatment == "Control"] <- "#C77CFF"
+clustering <- as.phylo(hclust(dist.bc, method = "complete"))
+plot(clustering, tip.color = SeawaterTreatment , direction = "downwards")
+```
+
+## Analyse des échantillons d'eau
+
+## a. Quel est l'effet des traitements sur les communautées bactériennes de l'eau de mer ?
+
+Pour répondre à cette question le jeu de donnée **data_Water_DuringTreatment** est utilisé pour voir l'effet de 2 traitements (UV seul ou UV/TiO2) sur les communautés bactériennes de l'EMC (Eau de Mer Contaminée par du virus OsHV-1 durant 24h) par rapport à un contrôle de cette EMC resté à l'obscurité pendant toute la durée des traitement. Pour répondre à cette question le jeu de donnée **data_Oyster_OsHV1.treatment** est utilisé.
+
+#### Analyse de la diversité alpha
+
+La diversité alpha représente les **variations de communautés bactérienne au sein d'un même échantillons**. Il peut être calculé suivant différents indices :\
+- **Richness ou Observed** qui représente la diversité réelle dans l'échantillon\
+- **Chao 1** qui représente la diversité réelle dans l'échantillon corrigé avec les communautées de faibles abondances/détection (singleton et doubleton)\
+- **Shannon** qui représente l'uniformité de la diversité dans l'échantillon
+
+```{r, message=FALSE}
+p1.2 <- plot_richness(data_Water_DuringTreatment, color="SeawaterTreatment", x="SeawaterTreatment", measures = c("Chao1", "Shannon", "Observed"))  + geom_boxplot(aes(fill=SeawaterTreatment), alpha=0.2)
+plot(p1.2)
+
+p2.2 <- plot_richness(data_Water_DuringTreatment, color="SamplingTime", x="SamplingTime", measures = c("Chao1", "Shannon", "Observed"))  + geom_boxplot(aes(fill=SamplingTime), alpha=0.2)
+plot(p2.2)
+
+p1.3 <- plot_richness(data_Water_DuringTreatment, color="SeawaterTreatment", x="SamplingTime", measures = c("Chao1", "Shannon", "Observed"))  + geom_boxplot(aes(fill=SamplingTime), alpha=0.2)
+plot(p1.3)
+```
+
+#### Analyse de la dissimilarité béta
+
+La dissimilarité beta (ou dissimilarité béta) représente les **différences de compositions bactériennes entre plusieurs échantillons**. Elle se base sur le **calcul d'une matrice de distance** entre les échantillons. Ici la **méthode de Bray-Curtis** est utilisée. Les distances ainsi calulés peuvent être visualisé grace à un **graphique MDS, aussi appelé PCoA** (Constrained Analysis of Principal Coordinates). C'est une méthode similaire à l'Analyse de Redondance mais utilisant des indices de dissimilarité non euclidien (Bary-curtis ou Manhattan).
+
+Une étude statistique basée sur des calculs de **Permanova** est également utilisé pour confirmer la significativité des différences de microbiote observées (p-value \< 0.05). Il s'agit d'un
+
+```{r, message=FALSE}
+ord1 <- ordinate(data_Water_DuringTreatment, method = "MDS", distance = "bray")
+ord2 <- ordinate(data_Water_DuringTreatment, method = "MDS", distance = "wunifrac")
+p1 <- plot_ordination(data_Water_DuringTreatment, ord1, color = "SeawaterTreatment") + theme_bw() + ggtitle("MDS: Seawater during treatment (by treatment type)")
+plot(p1)
+p1 <- plot_ordination(data_Water_DuringTreatment, ord2, color = "SeawaterTreatment") + theme_bw() + ggtitle("MDS: Seawater during treatment (by treatment type) - WUnifrac")
+plot(p1)
+
+p2 <- plot_ordination(data_Water_DuringTreatment, ord1, color = "SamplingTime") + theme_bw() + ggtitle("MDS: Seawater during treatment (by treatment duration)")
+plot(p2)
+
+metadata1 <- as (sample_data(data_Water_DuringTreatment),"data.frame")
+dist_Water.bc1 <- distance(data_Water_DuringTreatment, method = "bray")
+pairwise.perm.manova(dist_Water.bc1,metadata1$SeawaterTreatment,nperm=9999,p.method = "bonferroni")
+pairwise.perm.manova(dist_Water.bc1,metadata1$SamplingTime,nperm=9999,p.method = "bonferroni")
+pairwise.perm.manova(dist_Water.bc1,metadata1$TreatmentDuration.Type,nperm=9999,p.method = "bonferroni")
+
+dist.bc <- distance(data_Water_DuringTreatment, method = "bray")
+metadata <- as(sample_data(data_Water_DuringTreatment), "data.frame")
+cap <- vegan::capscale(dist.bc~SeawaterTreatment, data = metadata)
+cap.anova <- anova(cap, permutations = 9999)
+cap.anova
+```
+
+#### Analyse de la composition
+
+L'analyse de la composition bactérienne entre les conditions/échantillons se fait en 2 étapes indépendantes :\
+- **l'analyse de la composition bactérienne** en regardant les X genres bactériens les plus abondants et leur abondances dans les échantillons\
+- **l'analyse de l'abondance relative** (augmentation au diminution comparé aux contrôles) des genres bactériens les plus abondants --> _cf partie Log Fold Change à la fin de script_
+
+```{r, message=FALSE}
+
+
+p3 <- plot_composition(data_Water_DuringTreatment, "Kingdom", "d__Bacteria", "Genus", numberOfTaxa=20, fill = "Genus") 
+p3 <- p3 + facet_wrap(~SamplingTime, nrow = 1, scales = "free_x") 
+plot(p3) 
+
+p3 <- plot_composition(data_Water_DuringTreatment, "Kingdom", "d__Bacteria", "Genus", numberOfTaxa=17, fill = "Genus") 
+p3 <- p3 + facet_wrap(~SeawaterTreatment, nrow = 1, scales = "free_x") 
+plot(p3) 
+
+SampleType <- get_variable(data_Water_DuringTreatment, "SeawaterTreatment")
+SampleType[SampleType == "UV_TiO2"] <- "#F8766D"
+SampleType[SampleType == "UV"] <- "#7CAE00"
+SampleType[SampleType == "Dark"] <- "#00BFC4"
+SampleType[SampleType == "Control"] <- "#C77CFF"
+clustering <- as.phylo(hclust(dist.bc, method = "complete"))
+plot(clustering, tip.color = SampleType, direction = "downwards")
+
+OTUnames50 <- names(sort(taxa_sums(data_Water_DuringTreatment), TRUE)[1:50])
+data_Water_DuringTreatment_50 <- prune_taxa(OTUnames50, data_Water_DuringTreatment)
+OTUnames100 <- names(sort(taxa_sums(data_Water_DuringTreatment), TRUE)[1:100])
+data_Water_DuringTreatment_100 <- prune_taxa(OTUnames100, data_Water_DuringTreatment)
+
+plot_tree(data_Water_DuringTreatment_50, color="SamplingTime",size = "abundance", sizebase = 2, label.tips = "Genus", plot.margin=0.5, ladderize = TRUE, shape = "SeawaterTreatment", base.spacing = 0.04)
+
+plot_bar(data_Water_DuringTreatment_50, "Genus", fill = "Genus", facet_grid = SeawaterTreatment~SamplingTime)
+
+plot_heatmap(data_Water_DuringTreatment_50, "MDS", "bray", "TreatmentDuration.Type", "Genus", sample.order = "SeawaterTreatment")
+plot_heatmap(data_Water_DuringTreatment_100, "MDS", "bray", "TreatmentDuration.Type", "Genus", sample.order = "SeawaterTreatment")
+plot_heatmap(data_Water_DuringTreatment, "MDS", "bray", "TreatmentDuration.Type", "Genus", sample.order = "SeawaterTreatment")
+```
+
+## b. Quel est l'effet des traitements sur les communautées batériennes de l'eau post traitement ?
+
+Pour répondre à cette question le jeu de donnée **data_Water_AfterTreatment** est utilisé pour voir l'effet de 2 traitements (UV seul ou UV/TiO2) sur les communautés bactériennes de l'EMC (Eau de Mer Contaminée par du virus OsHV-1 durant 24h) par rapport à un contrôle de cette EMC resté à l'obscurité pendant toute la durée des traitement. Il est important de noter qu'après les 2h de traitement UV/TiO2, le TiO2 est éliminé de l'eau par flottaison et qu'après les 2h des différents traitement aucune irradiation UV supplémentaire n'est appliquée sur l'eau. Celle ci est conservé sous agitation à 21°C avec des cycles jours/nuits identiques à ceux utilisé pour les huîtres (10h/14h).
+
+#### Analyse de la diversité alpha
+
+La diversité alpha représente les **variations de communautés bactérienne au sein d'un même échantillons**. Il peut être calculé suivant différents indices :\
+- **Richness ou Observed** qui représente la diversité réelle dans l'échantillon\
+- **Chao 1** qui représente la diversité réelle dans l'échantillon corrigé avec les communautées de faibles abondances/détection (singleton et doubleton)\
+- **Shannon** qui représente l'uniformité de la diversité dans l'échantillon
+
+```{r, message=FALSE}
+p1.2 <- plot_richness(data_Water_AfterTreatment, color="SeawaterTreatment", x="SeawaterTreatment", measures = c("Chao1", "Shannon", "Observed"))  + geom_boxplot(aes(fill=SeawaterTreatment), alpha=0.2)
+plot(p1.2)
+
+p1.2 <- plot_richness(data_Water_AfterTreatment, color="SeawaterTreatment", x="SamplingTime", measures = c("Chao1", "Shannon", "Observed"))  + geom_boxplot(aes(fill=SamplingTime), alpha=0.2)
+plot(p1.2)
+
+p2.2 <- plot_richness(data_Water_AfterTreatment, color="SamplingTime", x="SamplingTime", measures = c("Chao1", "Shannon", "Observed"))  + geom_boxplot(aes(fill=SamplingTime), alpha=0.2)
+plot(p2.2)
+```
+
+#### Analyse de la dissimilarité béta
+
+La dissimilarité beta (ou dissimilarité béta) représente les **différences de compositions bactériennes entre plusieurs échantillons**. Elle se base sur le **calcul d'une matrice de distance** entre les échantillons. Ici la **méthode de Bray-Curtis** est utilisée. Les distances ainsi calulés peuvent être visualisé grace à un **graphique MDS, aussi appelé PCoA** (Constrained Analysis of Principal Coordinates). C'est une méthode similaire à l'Analyse de Redondance mais utilisant des indices de dissimilarité non euclidien (Bary-curtis ou Manhattan).
+
+Une étude statistique basée sur des calculs de **Permanova** est également utilisé pour confirmer la significativité des différences de microbiote observées (p-value \< 0.05). Il s'agit d'un
+
+```{r, message=FALSE}
+ord1 <- ordinate(data_Water_AfterTreatment, method = "MDS", distance = "bray")
+p1 <- plot_ordination(data_Water_AfterTreatment, ord1, color = "SeawaterTreatment") + theme_bw() + ggtitle("MDS: Seawater after treatment (by treatment type)") 
+plot(p1)
+
+p2 <- plot_ordination(data_Water_AfterTreatment, ord1, color = "SamplingTime") + theme_bw() + ggtitle("MDS: Seawater after treatment (by time after treatment)") 
+plot(p2)
+
+metadata1 <- as (sample_data(data_Water_AfterTreatment),"data.frame")
+dist_Water.bc1 <- distance(data_Water_AfterTreatment, method = "bray")
+pairwise.perm.manova(dist_Water.bc1,metadata1$SeawaterTreatment,nperm=9999,p.method = "bonferroni")
+pairwise.perm.manova(dist_Water.bc1,metadata1$SamplingTime,nperm=9999,p.method = "bonferroni")
+pairwise.perm.manova(dist_Water.bc1,metadata1$TreatmentDuration.Type,nperm=9999,p.method = "bonferroni")
+
+dist.bc <- distance(data_Water_AfterTreatment, method = "bray")
+metadata <- as(sample_data(data_Water_AfterTreatment), "data.frame")
+cap <- capscale(dist.bc~SamplingTime, data = metadata)
+cap.anova <- anova(cap, permutations = 9999)
+cap.anova
+
+dist.bc <- distance(data_Water_AfterTreatment, method = "bray")
+metadata <- as(sample_data(data_Water_AfterTreatment), "data.frame")
+cap <- capscale(dist.bc~SeawaterTreatment, data = metadata)
+cap.anova <- anova(cap, permutations = 9999)
+cap.anova
+
+abrel_bray <- as.matrix(dist.bc)
+
+```
+
+#### Analyse de la composition
+
+L'analyse de la composition bactérienne entre les conditions/échantillons se fait en 2 étapes indépendantes :\
+- **l'analyse de la composition bactérienne** en regardant les X genres bactériens les plus abondants et leur abondances dans les échantillons\
+- **l'analyse de l'abondance relative** (augmentation au diminution comparé aux contrôles) des genres bactériens les plus abondants --> _cf partie Log Fold Change à la fin de script_
+
+```{r, message=FALSE}
+p3 <- plot_composition(data_Water_AfterTreatment, "Kingdom", "d__Bacteria", "Genus", numberOfTaxa=20, fill = "Genus") 
+p3 <- p3 + facet_wrap(~SamplingTime, scales = "free_x", nrow = 1)
+plot(p3)
+
+p3 <- plot_composition(data_Water_AfterTreatment, "Kingdom", "d__Bacteria", "Genus", numberOfTaxa=20, fill = "Genus") 
+p3 <- p3 + facet_wrap(~SeawaterTreatment, scales = "free_x", nrow = 1)
+plot(p3)
+
+SampleType <- get_variable(data_Water_AfterTreatment, "SeawaterTreatment")
+SampleType[SampleType == "UV_TiO2"] <- "#F8766D"
+SampleType[SampleType == "UV"] <- "#7CAE00"
+SampleType[SampleType == "Dark"] <- "#00BFC4"
+clustering <- as.phylo(hclust(dist.bc, method = "complete"))
+plot(clustering, tip.color = SampleType, direction = "downwards")
+
+OTUnames50 <- names(sort(taxa_sums(data_Water_AfterTreatment), TRUE)[1:50])
+data_Water_AfterTreatment_50 <- prune_taxa(OTUnames50, data_Water_AfterTreatment)
+OTUnames100 <- names(sort(taxa_sums(data_Water_AfterTreatment), TRUE)[1:100])
+data_Water_AfterTreatment_100 <- prune_taxa(OTUnames100, data_Water_AfterTreatment)
+
+plot_tree(data_Water_AfterTreatment_50, color="SamplingTime",size = "abundance", sizebase = 2, label.tips = "Genus", plot.margin=0.5, ladderize = TRUE, shape = "SeawaterTreatment", base.spacing = 0.04)
+
+plot_bar(data_Water_AfterTreatment_50, "Genus", fill = "Genus", facet_grid = SeawaterTreatment~SamplingTime)
+
+plot_heatmap(data_Water_AfterTreatment_50, "MDS", "bray", "TreatmentDuration.Type", "Genus")
+plot_heatmap(data_Water_AfterTreatment_100, "MDS", "bray", "TreatmentDuration.Type", "Genus")
+plot_heatmap(data_Water_AfterTreatment, "MDS", "bray", "TreatmentDuration.Type", "Genus")
+```
+
+## Changement au sein des Vibrios
+
+```{r, message=FALSE}
+data_Vibrio <-  subset_taxa(data_Water_DuringTreatment, Genus=="Vibrio")
+data_Vibrio
+
+tax <- data.frame(tax_table(data2))
+
+tax.clean <- data.frame(row.names = row.names(tax),
+Kingdom = str_replace(tax[,1], "D_0__",""),
+Phylum = str_replace(tax[,2], "D_1__",""),
+Class = str_replace(tax[,3], "D_2__",""),
+Order = str_replace(tax[,4], "D_3__",""),
+Family = str_replace(tax[,5], "D_4__",""),
+Genus = str_replace(tax[,6], "D_5__",""),
+Species = str_replace(tax[,7], "D_6__",""),
+stringsAsFactors = FALSE)
+tax.clean[is.na(tax.clean)] <- ""
+
+ASV_Name <- row.names(tax.clean)
+tax.clean$ASV_Name <- ASV_Name
+
+for (i in 1:7){ tax.clean[,i] <- as.character(tax.clean[,i])}
+
+tax.clean[is.na(tax.clean)] <- ""
+for (i in 1:nrow(tax.clean)) {
+  if (tax.clean[i,6]=="Vibrio"){
+    vibrio <- paste("Vibrio_", tax.clean[i,8], sep = "")
+    tax.clean[i,7] <- vibrio
+  }
+}
+tax.clean.Vibrio <- tax.clean [,1:7]
+tax_table(data_Vibrio) <- as.matrix(tax.clean.Vibrio)
+
+p3 <- plot_composition(data_Vibrio, "Kingdom", "d__Bacteria", "Species", numberOfTaxa=10, fill = "Species") 
+p3 <- p3 + facet_wrap(~SamplingTime, scales = "free_x", nrow = 1)
+plot(p3)
+
+p3 <- plot_composition(data_Vibrio, "Kingdom", "d__Bacteria", "Species", numberOfTaxa=10, fill = "Species") 
+p3 <- p3 + facet_wrap(~SeawaterTreatment, scales = "free_x", nrow = 1)
+plot(p3)
+
+plot_heatmap(data_Vibrio, "MDS", "bray", "TreatmentDuration.Type", "Species", sample.order = "SeawaterTreatment")
+plot_heatmap(data_Vibrio, "MDS", "bray", "TreatmentDuration.Type", "Species", sample.order = "SamplingTime")
+
+test1 <- subset_samples(data_Vibrio, !SeawaterTreatment=="UV")
+test1 <- subset_samples(test1, !TreatmentDuration.Type=="0.5h_Dark")
+test1 <- subset_samples(test1, !TreatmentDuration.Type=="1h_Dark")
+test1 <- subset_samples(test1, !TreatmentDuration.Type=="2h_Dark")
+plot_heatmap(test1, "MDS", "bray", "TreatmentDuration.Type", "Species", sample.order = "SamplingTime")
+
+test2 <- subset_samples(data_Vibrio, !SeawaterTreatment=="UV_TiO2")
+test2 <- subset_samples(test2, !TreatmentDuration.Type=="0.5h_Dark")
+test2 <- subset_samples(test2, !TreatmentDuration.Type=="1h_Dark")
+test2 <- subset_samples(test2, !TreatmentDuration.Type=="2h_Dark")
+plot_heatmap(test2, "MDS", "bray", "TreatmentDuration.Type", "Species", sample.order = "SamplingTime")
+
+otu_Vibrio <- data.frame(otu_table(data_Vibrio))
+otu_Vibrio_Matrix <- as.matrix(otu_Vibrio)
+otu_Vibrio_Matrix <- otu_Vibrio_Matrix[apply(otu_Vibrio_Matrix[,-1],1,function(x) !all(x==0)),]
+heatmap(otu_Vibrio_Matrix)
+
+####
+UV_TiO2 <- subset_samples(data_Vibrio, !SeawaterTreatment=="UV")
+UV_TiO2 <- subset_samples(UV_TiO2, !TreatmentDuration.Type=="0.5h_Dark")
+UV_TiO2 <- subset_samples(UV_TiO2, !TreatmentDuration.Type=="1h_Dark")
+UV_TiO2 <- subset_samples(UV_TiO2, !TreatmentDuration.Type=="2h_Dark")
+
+test <- phyloseq_to_deseq2(UV_TiO2, ~SeawaterTreatment)
+test <- DESeq(test, test="Wald", fitType="parametric")
+res=results(test, cooksCutoff = FALSE)
+alpha=0.05
+sigtab=res[which(res$pvalue<alpha),]
+sigtab=cbind(as(sigtab, "data.frame"), as(tax_table(UV_TiO2)[rownames(sigtab),], "matrix"))
+head(sigtab)
+
+ggplot(sigtab, aes(x=Species, y=log2FoldChange)) + geom_point(size=6) + 
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust=0.5))
+```
+
+## Log Fold Change
+
+```{r, message=FALSE}
+UV <- subset_samples(data_Water_DuringTreatment, !SeawaterTreatment=="UV_TiO2")
+
+UV_TiO2 <- subset_samples(data_Water_DuringTreatment, !SeawaterTreatment=="UV")
+
+library("DESeq2")
+test <- phyloseq_to_deseq2(data_Water_AfterTreatment, ~SeawaterTreatment)
+test <- DESeq(test, test="Wald", fitType="mean") # plusieurs type d'ajustement de la dispersion ici j'ai choisi un ajustement par la moyenne
+alpha=0.05
+res1=results(test, cooksCutoff = FALSE, contrast = c("SeawaterTreatment", "UV", "Dark")) # contrast prend 3 arguments : le nom de la colone de condition, le nom de la condition pour le numerateur (du log fold change) et le nom de la condition pour le denominateur
+sigtab1=res1[which(res1$padj<alpha),]
+sigtab1=cbind(as(sigtab1, "data.frame"), as(tax_table(data_Water_AfterTreatment)[rownames(sigtab1),], "matrix"))
+head(sigtab1)
+
+LogFoldChange_UV <- ggplot(sigtab1, aes(x=Genus, y=log2FoldChange)) + geom_point(size=6) + 
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust=0.5)) + ggtitle("UV treatment vs Control (padj < 0.05)")
+
+res2=results(test, cooksCutoff = FALSE, contrast = c("SeawaterTreatment", "UV_TiO2", "Dark"))
+sigtab2=res2[which(res2$padj<alpha),]
+sigtab2=cbind(as(sigtab2, "data.frame"), as(tax_table(data_Water_AfterTreatment)[rownames(sigtab2),], "matrix"))
+head(sigtab2)
+
+LogFoldChange_UVTiO2 <- ggplot(sigtab2, aes(x=Genus, y=log2FoldChange)) + geom_point(size=6) + 
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust=0.5)) + ggtitle(" UV/TiO2 treatment vs Control (padj < 0.05)")
+
+res3=results(test, cooksCutoff = FALSE, contrast = c("SeawaterTreatment", "UV_TiO2", "UV"))
+sigtab3=res3[which(res3$padj<alpha),]
+sigtab3=cbind(as(sigtab3, "data.frame"), as(tax_table(data_Water_AfterTreatment)[rownames(sigtab3),], "matrix"))
+head(sigtab3)
+
+LogFoldChange <- ggplot(sigtab3, aes(x=Genus, y=log2FoldChange)) + geom_point(size=6) + 
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust=0.5))
+
+ggarrange(LogFoldChange_UVTiO2, LogFoldChange_UV, labels = c("b.", "c."), ncol = 2)
+
+```
