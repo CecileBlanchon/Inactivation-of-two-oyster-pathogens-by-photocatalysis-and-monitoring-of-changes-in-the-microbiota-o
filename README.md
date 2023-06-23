@@ -1,6 +1,6 @@
-# Article: Inactivation of oyster pathogens by photo-oxidation in seawater: a case study of the effect of treatment on OsHV-1 µVar, *Vibrio harveyi*.
+# Article: Inactivation of two oyster pathogens by photo-oxidation in seawater: a case study of the effect of treatment on OsHV-1 µVar and *Vibrio harveyi*.
 
-Cécile Blanchon<sup>1,2,3,4</sup>, Eve Toulza<sup>1</sup>, Christophe Calvayrac<sup>2,3</sup>, Stanislawa Eichendorff<sup>4</sup>, Caroline Montagnani<sup>1</sup>, Marie-Agnès Travers<sup>1</sup>, Jeremie Vidal-Dupiol<sup>1</sup>, Jean-Michel Escoubas<sup>1</sup>, Christophe Stavrakakis<sup>5</sup>, Gael Plantard<sup>4</sup>
+Cécile Blanchon<sup>1,2,3,4</sup>, Eve Toulza<sup>1</sup>, Christophe Calvayrac<sup>2,3</sup>, Stanislawa Eichendorff<sup>4</sup>, Marie-Agnès Travers<sup>1</sup>, Jeremie Vidal-Dupiol<sup>1</sup>, Caroline Montagnani<sup>1</sup>, Jean-Michel Escoubas<sup>1</sup>, Christophe Stavrakakis<sup>5</sup>, Gael Plantard<sup>4</sup>
 
 1 IHPE, Université de Montpellier, CNRS, Ifremer, Université de Perpignan Via Domitia, Perpignan, France \
 2 Biocapteurs Analyses Environnement, Université de Perpignan Via Domitia, 66000 Perpignan, France \
