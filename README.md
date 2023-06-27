@@ -11,7 +11,7 @@ Cécile Blanchon<sup>1,2,3,4</sup>, Eve Toulza<sup>1</sup>, Christophe Calvayrac
 This repository contain all de file used for the barcoding analysis present in our article.
 
 ## 1. Presentation of the data ##
-The data present here (**20220905_DataPhotomic2**) are 16S rRNA gene of bacterial communities amplified usinf the variable V3-V4 loops (341F / 805R). This data were obtained by Paired-end sequencing performed on the MiSeq system (Illumina) at the Bio-Environment platform (UPVD). The **MetadataFile3_ASV.txt** present all the metadata needed for the analysis usinf the tsv format (tab used as separator).
+The data are available at the NCBI-SRA (**accession number PRJNA987558**) are 16S rRNA gene of bacterial communities amplified usinf the variable V3-V4 loops (341F / 805R). This data were obtained by Paired-end sequencing performed on the MiSeq system (Illumina) at the Bio-Environment platform (UPVD). The **MetadataFile3_ASV.txt** present all the metadata needed for the analysis usinf the tsv format (tab used as separator).
 
 ## 2. The Amplicon Sequence Variants (ASV) creation ##
 ASVs were created using bash language on a mac terminal. The used script (**ASV_Script.md**) present all the step we perform to obtain our results. During the ASV creation pipeline we also created the Phylogenetic tree used for the diversity analysis (**rooted-tree_PseudoPooling.qza**) and the Taxonomic affiliation (**taxonomy_SilvaTraining_Pooling2.qza**).
